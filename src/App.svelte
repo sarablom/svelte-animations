@@ -10,6 +10,7 @@
         draw,
         crossfade,
     } from "svelte/transition";
+    import { flip } from "svelte/animate";
 
     import Spring from "./Spring.svelte";
 
@@ -30,7 +31,7 @@
     }, 1000);
 
     function addBox() {
-        boxes = [...boxes, boxInput.value];
+        boxes = [boxInput.value, ...boxes];
     }
 
     function discard(value) {
@@ -38,8 +39,15 @@
     }
 </script>
 
-<!-- <progress value={$progress} />
-<Spring /> -->
+<hr />
+
+<progress value={$progress} />
+
+<hr />
+
+<Spring />
+
+<hr />
 
 <button
     on:click={() => {
@@ -48,7 +56,8 @@
 >
 
 {#if showParagraph}
-    <p transition:fly={{ x: 300 }}>This is a paragraph</p>
+    <!-- Different transitions for in and out events -->
+    <p in:fade out:fly={{ x: 300 }}>This is a paragraph</p>
 {/if}
 
 <hr />
@@ -79,6 +88,10 @@
             opacity: 0.5,
             x: -100,
             y: -100,
+        }}
+        animate:flip={{
+            duration: 1000,
+            easing: cubicOut,
         }}
     >
         {box}
