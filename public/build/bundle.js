@@ -462,6 +462,12 @@ var app = (function () {
         };
     }
 
+    const globals = (typeof window !== 'undefined'
+        ? window
+        : typeof globalThis !== 'undefined'
+            ? globalThis
+            : global);
+
     function destroy_block(block, lookup) {
         block.d(1);
         lookup.delete(block.key);
@@ -808,6 +814,9 @@ var app = (function () {
         return { set, update, subscribe };
     }
 
+    function cubicInOut(t) {
+        return t < 0.5 ? 4.0 * t * t * t : 0.5 * Math.pow(2.0 * t - 2.0, 3.0) + 1.0;
+    }
     function cubicOut(t) {
         const f = t - 1.0;
         return f * f * f + 1.0;
@@ -1019,6 +1028,45 @@ var app = (function () {
         };
     }
 
+    /*! *****************************************************************************
+    Copyright (c) Microsoft Corporation.
+
+    Permission to use, copy, modify, and/or distribute this software for any
+    purpose with or without fee is hereby granted.
+
+    THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+    REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+    AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+    INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+    LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+    OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+    PERFORMANCE OF THIS SOFTWARE.
+    ***************************************************************************** */
+
+    function __rest(s, e) {
+        var t = {};
+        for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+            t[p] = s[p];
+        if (s != null && typeof Object.getOwnPropertySymbols === "function")
+            for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+                if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+                    t[p[i]] = s[p[i]];
+            }
+        return t;
+    }
+
+    function blur(node, { delay = 0, duration = 400, easing = cubicInOut, amount = 5, opacity = 0 } = {}) {
+        const style = getComputedStyle(node);
+        const target_opacity = +style.opacity;
+        const f = style.filter === 'none' ? '' : style.filter;
+        const od = target_opacity * (1 - opacity);
+        return {
+            delay,
+            duration,
+            easing,
+            css: (_t, u) => `opacity: ${target_opacity - (od * u)}; filter: ${f} blur(${u * amount}px);`
+        };
+    }
     function fade(node, { delay = 0, duration = 400, easing = identity } = {}) {
         const o = +getComputedStyle(node).opacity;
         return {
@@ -1082,6 +1130,80 @@ var app = (function () {
 			opacity: ${target_opacity - (od * u)}
 		`
         };
+    }
+    function draw(node, { delay = 0, speed, duration, easing = cubicInOut } = {}) {
+        let len = node.getTotalLength();
+        const style = getComputedStyle(node);
+        if (style.strokeLinecap !== 'butt') {
+            len += parseInt(style.strokeWidth);
+        }
+        if (duration === undefined) {
+            if (speed === undefined) {
+                duration = 800;
+            }
+            else {
+                duration = len / speed;
+            }
+        }
+        else if (typeof duration === 'function') {
+            duration = duration(len);
+        }
+        return {
+            delay,
+            duration,
+            easing,
+            css: (t, u) => `stroke-dasharray: ${t * len} ${u * len}`
+        };
+    }
+    function crossfade(_a) {
+        var { fallback } = _a, defaults = __rest(_a, ["fallback"]);
+        const to_receive = new Map();
+        const to_send = new Map();
+        function crossfade(from, node, params) {
+            const { delay = 0, duration = d => Math.sqrt(d) * 30, easing = cubicOut } = assign(assign({}, defaults), params);
+            const to = node.getBoundingClientRect();
+            const dx = from.left - to.left;
+            const dy = from.top - to.top;
+            const dw = from.width / to.width;
+            const dh = from.height / to.height;
+            const d = Math.sqrt(dx * dx + dy * dy);
+            const style = getComputedStyle(node);
+            const transform = style.transform === 'none' ? '' : style.transform;
+            const opacity = +style.opacity;
+            return {
+                delay,
+                duration: is_function(duration) ? duration(d) : duration,
+                easing,
+                css: (t, u) => `
+				opacity: ${t * opacity};
+				transform-origin: top left;
+				transform: ${transform} translate(${u * dx}px,${u * dy}px) scale(${t + (1 - t) * dw}, ${t + (1 - t) * dh});
+			`
+            };
+        }
+        function transition(items, counterparts, intro) {
+            return (node, params) => {
+                items.set(params.key, {
+                    rect: node.getBoundingClientRect()
+                });
+                return () => {
+                    if (counterparts.has(params.key)) {
+                        const { rect } = counterparts.get(params.key);
+                        counterparts.delete(params.key);
+                        return crossfade(rect, node, params);
+                    }
+                    // if the node is disappearing altogether
+                    // (i.e. wasn't claimed by the other list)
+                    // then we need to supply an outro
+                    items.delete(params.key);
+                    return fallback && fallback(node, params, intro);
+                };
+            };
+        }
+        return [
+            transition(to_send, to_receive, false),
+            transition(to_receive, to_send, true)
+        ];
     }
 
     /* src\Spring.svelte generated by Svelte v3.49.0 */
@@ -1316,18 +1438,68 @@ var app = (function () {
     }
 
     /* src\App.svelte generated by Svelte v3.49.0 */
+
+    const { console: console_1 } = globals;
     const file = "src\\App.svelte";
 
     function get_each_context(ctx, list, i) {
     	const child_ctx = ctx.slice();
-    	child_ctx[6] = list[i];
+    	child_ctx[12] = list[i];
     	return child_ctx;
     }
 
-    // (38:0) {#each boxes as box (box)}
+    // (50:0) {#if showParagraph}
+    function create_if_block(ctx) {
+    	let p;
+    	let p_transition;
+    	let current;
+
+    	const block = {
+    		c: function create() {
+    			p = element("p");
+    			p.textContent = "This is a paragraph";
+    			add_location(p, file, 50, 4, 966);
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, p, anchor);
+    			current = true;
+    		},
+    		i: function intro(local) {
+    			if (current) return;
+
+    			add_render_callback(() => {
+    				if (!p_transition) p_transition = create_bidirectional_transition(p, fly, { x: 300 }, true);
+    				p_transition.run(1);
+    			});
+
+    			current = true;
+    		},
+    		o: function outro(local) {
+    			if (!p_transition) p_transition = create_bidirectional_transition(p, fly, { x: 300 }, false);
+    			p_transition.run(0);
+    			current = false;
+    		},
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(p);
+    			if (detaching && p_transition) p_transition.end();
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_if_block.name,
+    		type: "if",
+    		source: "(50:0) {#if showParagraph}",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    // (59:0) {#each boxes as box (box)}
     function create_each_block(key_1, ctx) {
     	let div;
-    	let t0_value = /*box*/ ctx[6] + "";
+    	let t0_value = /*box*/ ctx[12] + "";
     	let t0;
     	let t1;
     	let div_transition;
@@ -1343,7 +1515,7 @@ var app = (function () {
     			t0 = text(t0_value);
     			t1 = space();
     			attr_dev(div, "class", "svelte-xdmt2q");
-    			add_location(div, file, 38, 4, 838);
+    			add_location(div, file, 60, 4, 1209);
     			this.first = div;
     		},
     		m: function mount(target, anchor) {
@@ -1353,28 +1525,57 @@ var app = (function () {
     			current = true;
 
     			if (!mounted) {
-    				dispose = listen_dev(
-    					div,
-    					"click",
-    					function () {
-    						if (is_function(/*discard*/ ctx[3].bind(this, /*box*/ ctx[6]))) /*discard*/ ctx[3].bind(this, /*box*/ ctx[6]).apply(this, arguments);
-    					},
-    					false,
-    					false,
-    					false
-    				);
+    				dispose = [
+    					listen_dev(
+    						div,
+    						"click",
+    						function () {
+    							if (is_function(/*discard*/ ctx[4].bind(this, /*box*/ ctx[12]))) /*discard*/ ctx[4].bind(this, /*box*/ ctx[12]).apply(this, arguments);
+    						},
+    						false,
+    						false,
+    						false
+    					),
+    					listen_dev(div, "introstart", /*introstart_handler*/ ctx[7], false, false, false),
+    					listen_dev(div, "introend", /*introend_handler*/ ctx[8], false, false, false),
+    					listen_dev(div, "outrostart", /*outrostart_handler*/ ctx[9], false, false, false),
+    					listen_dev(div, "outroend", /*outroend_handler*/ ctx[10], false, false, false)
+    				];
 
     				mounted = true;
     			}
     		},
     		p: function update(new_ctx, dirty) {
     			ctx = new_ctx;
-    			if ((!current || dirty & /*boxes*/ 1) && t0_value !== (t0_value = /*box*/ ctx[6] + "")) set_data_dev(t0, t0_value);
+    			if ((!current || dirty & /*boxes*/ 1) && t0_value !== (t0_value = /*box*/ ctx[12] + "")) set_data_dev(t0, t0_value);
     		},
     		i: function intro(local) {
     			if (current) return;
 
-    			add_render_callback(() => {
+    			if (local) {
+    				add_render_callback(() => {
+    					if (!div_transition) div_transition = create_bidirectional_transition(
+    						div,
+    						fly,
+    						{
+    							delay: 0,
+    							duration: 400,
+    							easing: cubicOut,
+    							opacity: 0.5,
+    							x: -100,
+    							y: -100
+    						},
+    						true
+    					);
+
+    					div_transition.run(1);
+    				});
+    			}
+
+    			current = true;
+    		},
+    		o: function outro(local) {
+    			if (local) {
     				if (!div_transition) div_transition = create_bidirectional_transition(
     					div,
     					fly,
@@ -1386,37 +1587,19 @@ var app = (function () {
     						x: -100,
     						y: -100
     					},
-    					true
+    					false
     				);
 
-    				div_transition.run(1);
-    			});
+    				div_transition.run(0);
+    			}
 
-    			current = true;
-    		},
-    		o: function outro(local) {
-    			if (!div_transition) div_transition = create_bidirectional_transition(
-    				div,
-    				fly,
-    				{
-    					delay: 0,
-    					duration: 400,
-    					easing: cubicOut,
-    					opacity: 0.5,
-    					x: -100,
-    					y: -100
-    				},
-    				false
-    			);
-
-    			div_transition.run(0);
     			current = false;
     		},
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(div);
     			if (detaching && div_transition) div_transition.end();
     			mounted = false;
-    			dispose();
+    			run_all(dispose);
     		}
     	};
 
@@ -1424,7 +1607,7 @@ var app = (function () {
     		block,
     		id: create_each_block.name,
     		type: "each",
-    		source: "(38:0) {#each boxes as box (box)}",
+    		source: "(59:0) {#each boxes as box (box)}",
     		ctx
     	});
 
@@ -1432,19 +1615,25 @@ var app = (function () {
     }
 
     function create_fragment(ctx) {
-    	let input;
-    	let t0;
-    	let button;
+    	let button0;
+    	let t1;
     	let t2;
+    	let hr;
+    	let t3;
+    	let input;
+    	let t4;
+    	let button1;
+    	let t6;
     	let each_blocks = [];
     	let each_1_lookup = new Map();
     	let each_1_anchor;
     	let current;
     	let mounted;
     	let dispose;
+    	let if_block = /*showParagraph*/ ctx[2] && create_if_block(ctx);
     	let each_value = /*boxes*/ ctx[0];
     	validate_each_argument(each_value);
-    	const get_key = ctx => /*box*/ ctx[6];
+    	const get_key = ctx => /*box*/ ctx[12];
     	validate_each_keys(ctx, each_value, get_each_context, get_key);
 
     	for (let i = 0; i < each_value.length; i += 1) {
@@ -1455,30 +1644,45 @@ var app = (function () {
 
     	const block = {
     		c: function create() {
-    			input = element("input");
-    			t0 = space();
-    			button = element("button");
-    			button.textContent = "Add";
+    			button0 = element("button");
+    			button0.textContent = "Toggle paragraph";
+    			t1 = space();
+    			if (if_block) if_block.c();
     			t2 = space();
+    			hr = element("hr");
+    			t3 = space();
+    			input = element("input");
+    			t4 = space();
+    			button1 = element("button");
+    			button1.textContent = "Add";
+    			t6 = space();
 
     			for (let i = 0; i < each_blocks.length; i += 1) {
     				each_blocks[i].c();
     			}
 
     			each_1_anchor = empty();
+    			add_location(button0, file, 43, 0, 837);
+    			add_location(hr, file, 53, 0, 1028);
     			attr_dev(input, "type", "text");
-    			add_location(input, file, 34, 0, 724);
-    			add_location(button, file, 35, 0, 767);
+    			add_location(input, file, 55, 0, 1036);
+    			add_location(button1, file, 56, 0, 1079);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
     		},
     		m: function mount(target, anchor) {
-    			insert_dev(target, input, anchor);
-    			/*input_binding*/ ctx[4](input);
-    			insert_dev(target, t0, anchor);
-    			insert_dev(target, button, anchor);
+    			insert_dev(target, button0, anchor);
+    			insert_dev(target, t1, anchor);
+    			if (if_block) if_block.m(target, anchor);
     			insert_dev(target, t2, anchor);
+    			insert_dev(target, hr, anchor);
+    			insert_dev(target, t3, anchor);
+    			insert_dev(target, input, anchor);
+    			/*input_binding*/ ctx[6](input);
+    			insert_dev(target, t4, anchor);
+    			insert_dev(target, button1, anchor);
+    			insert_dev(target, t6, anchor);
 
     			for (let i = 0; i < each_blocks.length; i += 1) {
     				each_blocks[i].m(target, anchor);
@@ -1488,12 +1692,37 @@ var app = (function () {
     			current = true;
 
     			if (!mounted) {
-    				dispose = listen_dev(button, "click", /*addBox*/ ctx[2], false, false, false);
+    				dispose = [
+    					listen_dev(button0, "click", /*click_handler*/ ctx[5], false, false, false),
+    					listen_dev(button1, "click", /*addBox*/ ctx[3], false, false, false)
+    				];
+
     				mounted = true;
     			}
     		},
     		p: function update(ctx, [dirty]) {
-    			if (dirty & /*cubicOut, discard, boxes*/ 9) {
+    			if (/*showParagraph*/ ctx[2]) {
+    				if (if_block) {
+    					if (dirty & /*showParagraph*/ 4) {
+    						transition_in(if_block, 1);
+    					}
+    				} else {
+    					if_block = create_if_block(ctx);
+    					if_block.c();
+    					transition_in(if_block, 1);
+    					if_block.m(t2.parentNode, t2);
+    				}
+    			} else if (if_block) {
+    				group_outros();
+
+    				transition_out(if_block, 1, 1, () => {
+    					if_block = null;
+    				});
+
+    				check_outros();
+    			}
+
+    			if (dirty & /*cubicOut, discard, boxes, console*/ 17) {
     				each_value = /*boxes*/ ctx[0];
     				validate_each_argument(each_value);
     				group_outros();
@@ -1504,6 +1733,7 @@ var app = (function () {
     		},
     		i: function intro(local) {
     			if (current) return;
+    			transition_in(if_block);
 
     			for (let i = 0; i < each_value.length; i += 1) {
     				transition_in(each_blocks[i]);
@@ -1512,6 +1742,8 @@ var app = (function () {
     			current = true;
     		},
     		o: function outro(local) {
+    			transition_out(if_block);
+
     			for (let i = 0; i < each_blocks.length; i += 1) {
     				transition_out(each_blocks[i]);
     			}
@@ -1519,11 +1751,17 @@ var app = (function () {
     			current = false;
     		},
     		d: function destroy(detaching) {
-    			if (detaching) detach_dev(input);
-    			/*input_binding*/ ctx[4](null);
-    			if (detaching) detach_dev(t0);
-    			if (detaching) detach_dev(button);
+    			if (detaching) detach_dev(button0);
+    			if (detaching) detach_dev(t1);
+    			if (if_block) if_block.d(detaching);
     			if (detaching) detach_dev(t2);
+    			if (detaching) detach_dev(hr);
+    			if (detaching) detach_dev(t3);
+    			if (detaching) detach_dev(input);
+    			/*input_binding*/ ctx[6](null);
+    			if (detaching) detach_dev(t4);
+    			if (detaching) detach_dev(button1);
+    			if (detaching) detach_dev(t6);
 
     			for (let i = 0; i < each_blocks.length; i += 1) {
     				each_blocks[i].d(detaching);
@@ -1531,7 +1769,7 @@ var app = (function () {
 
     			if (detaching) detach_dev(each_1_anchor);
     			mounted = false;
-    			dispose();
+    			run_all(dispose);
     		}
     	};
 
@@ -1549,7 +1787,11 @@ var app = (function () {
     function instance($$self, $$props, $$invalidate) {
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('App', slots, []);
+    	let boxes = ["Apples"];
+    	let boxInput;
+    	let showParagraph = false;
 
+    	// configuration for the tweened function
     	const progress = tweened(0, {
     		delay: 0,
     		duration: 1000,
@@ -1564,9 +1806,6 @@ var app = (function () {
     		1000
     	);
 
-    	let boxes = ["Apples"];
-    	let boxInput;
-
     	function addBox() {
     		$$invalidate(0, boxes = [...boxes, boxInput.value]);
     	}
@@ -1578,8 +1817,12 @@ var app = (function () {
     	const writable_props = [];
 
     	Object.keys($$props).forEach(key => {
-    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<App> was created with unknown prop '${key}'`);
+    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console_1.warn(`<App> was created with unknown prop '${key}'`);
     	});
+
+    	const click_handler = () => {
+    		$$invalidate(2, showParagraph = !showParagraph);
+    	};
 
     	function input_binding($$value) {
     		binding_callbacks[$$value ? 'unshift' : 'push'](() => {
@@ -1588,6 +1831,22 @@ var app = (function () {
     		});
     	}
 
+    	const introstart_handler = () => {
+    		console.log("Adding the element starts");
+    	};
+
+    	const introend_handler = () => {
+    		console.log("Adding the element ends");
+    	};
+
+    	const outrostart_handler = () => {
+    		console.log("Removing the element starts");
+    	};
+
+    	const outroend_handler = () => {
+    		console.log("Removing the element ends");
+    	};
+
     	$$self.$capture_state = () => ({
     		tweened,
     		cubicOut,
@@ -1595,10 +1854,14 @@ var app = (function () {
     		fly,
     		slide,
     		scale,
+    		blur,
+    		draw,
+    		crossfade,
     		Spring,
-    		progress,
     		boxes,
     		boxInput,
+    		showParagraph,
+    		progress,
     		addBox,
     		discard
     	});
@@ -1606,13 +1869,26 @@ var app = (function () {
     	$$self.$inject_state = $$props => {
     		if ('boxes' in $$props) $$invalidate(0, boxes = $$props.boxes);
     		if ('boxInput' in $$props) $$invalidate(1, boxInput = $$props.boxInput);
+    		if ('showParagraph' in $$props) $$invalidate(2, showParagraph = $$props.showParagraph);
     	};
 
     	if ($$props && "$$inject" in $$props) {
     		$$self.$inject_state($$props.$$inject);
     	}
 
-    	return [boxes, boxInput, addBox, discard, input_binding];
+    	return [
+    		boxes,
+    		boxInput,
+    		showParagraph,
+    		addBox,
+    		discard,
+    		click_handler,
+    		input_binding,
+    		introstart_handler,
+    		introend_handler,
+    		outrostart_handler,
+    		outroend_handler
+    	];
     }
 
     class App extends SvelteComponentDev {

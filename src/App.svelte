@@ -1,9 +1,21 @@
 <script>
     import { tweened } from "svelte/motion";
     import { cubicOut } from "svelte/easing";
-    import { fade, fly, slide, scale } from "svelte/transition";
+    import {
+        fade,
+        fly,
+        slide,
+        scale,
+        blur,
+        draw,
+        crossfade,
+    } from "svelte/transition";
 
     import Spring from "./Spring.svelte";
+
+    let boxes = ["Apples"];
+    let boxInput;
+    let showParagraph = false;
 
     // configuration for the tweened function
     const progress = tweened(0, {
@@ -17,28 +29,50 @@
         progress.set(1);
     }, 1000);
 
-    let boxes = ["Apples"];
-    let boxInput;
-
     function addBox() {
         boxes = [...boxes, boxInput.value];
     }
 
     function discard(value) {
-        boxes = boxes.filter((box) => box !== value);
+        boxes = boxes.filter(box => box !== value);
     }
 </script>
 
 <!-- <progress value={$progress} />
 <Spring /> -->
 
+<button
+    on:click={() => {
+        showParagraph = !showParagraph;
+    }}>Toggle paragraph</button
+>
+
+{#if showParagraph}
+    <p transition:fly={{ x: 300 }}>This is a paragraph</p>
+{/if}
+
+<hr />
+
 <input type="text" bind:this={boxInput} />
 <button on:click={addBox}>Add</button>
 
 {#each boxes as box (box)}
+    <!-- local - only single items gets the transition -->
     <div
         on:click={discard.bind(this, box)}
-        transition:fly={{
+        on:introstart={() => {
+            console.log("Adding the element starts");
+        }}
+        on:introend={() => {
+            console.log("Adding the element ends");
+        }}
+        on:outrostart={() => {
+            console.log("Removing the element starts");
+        }}
+        on:outroend={() => {
+            console.log("Removing the element ends");
+        }}
+        transition:fly|local={{
             delay: 0,
             duration: 400,
             easing: cubicOut,
